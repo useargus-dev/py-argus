@@ -1,4 +1,4 @@
-# pyargus
+# useargus
 
 Load environment variables from [Argus](https://github.com/useargus-dev) over local IPC, with `.env` fallback — similar to `python-dotenv`, but secrets come from your Argus bucket when the desktop app is running.
 
@@ -11,7 +11,7 @@ Load environment variables from [Argus](https://github.com/useargus-dev) over lo
 ## Install
 
 ```bash
-pip install pyargus
+pip install useargus
 ```
 
 ## Usage
@@ -19,7 +19,7 @@ pip install pyargus
 Call `load_env()` **before** other modules read `os.environ`:
 
 ```python
-from pyargus import load_env
+from useargus import load_env
 
 load_env()
 ```
@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # After
-from pyargus import load_env
+from useargus import load_env
 load_env()
 ```
 
@@ -74,7 +74,7 @@ The first time a process connects, Argus shows an **access approval** dialog (up
 ### `load_env(...)`
 
 ```python
-from pyargus import load_env
+from useargus import load_env
 
 result = load_env(
     path=".env",                 # default: .env in cwd
@@ -94,7 +94,7 @@ Lower-level IPC call if you only need the bucket map:
 ```python
 import os
 
-from pyargus import fetch_bucket_env
+from useargus import fetch_bucket_env
 
 env = fetch_bucket_env(
     bucket_id=os.environ["ARGUS_BUCKET_ID"],
@@ -119,7 +119,7 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
 ruff check .
-mypy pyargus
+mypy useargus
 pytest
 python -m build
 ```

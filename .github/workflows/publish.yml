@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish pyargus
+    name: Publish useargus
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
       - name: CI checks
         run: |
           ruff check .
-          mypy pyargus
+          mypy useargus
           pytest
           python -m build
 
@@ -71,7 +71,7 @@ jobs:
               raise SystemExit("Failed to update version in pyproject.toml")
           path.write_text(updated, encoding="utf-8")
 
-          init_path = Path("pyargus/__init__.py")
+          init_path = Path("useargus/__init__.py")
           init_text = init_path.read_text(encoding="utf-8")
           init_updated, init_count = re.subn(
               r'^__version__ = "[^"]+"$',
@@ -81,7 +81,7 @@ jobs:
               flags=re.MULTILINE,
           )
           if init_count != 1:
-              raise SystemExit("Failed to update __version__ in pyargus/__init__.py")
+              raise SystemExit("Failed to update __version__ in useargus/__init__.py")
           init_path.write_text(init_updated, encoding="utf-8")
           PY
 
@@ -97,9 +97,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml pyargus/__init__.py
+          git add pyproject.toml useargus/__init__.py
           git diff --staged --quiet && echo "No version file changes to commit" && exit 0
-          git commit -m "chore: release pyargus v${VERSION}"
+          git commit -m "chore: release useargus v${VERSION}"
           git tag "v${VERSION}"
           git push origin "HEAD:${{ github.ref_name }}"
           git push origin "v${VERSION}"
@@ -108,5 +108,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
-          name: "pyargus v${{ env.VERSION }}"
+          name: "useargus v${{ env.VERSION }}"
           generate_release_notes: true

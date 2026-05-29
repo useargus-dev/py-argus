@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from pyargus.errors import (
+from useargus.errors import (
     ArgusConnectionError,
     ArgusDeniedError,
     ArgusError,
