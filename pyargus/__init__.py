@@ -1,5 +1,6 @@
 """Load environment variables from Argus via local IPC."""
 
+from pyargus.env import LoadEnvResult, load_env
 from pyargus.errors import (
     ArgusConnectionError,
     ArgusDeniedError,
@@ -7,7 +8,6 @@ from pyargus.errors import (
     ArgusLockedError,
 )
 from pyargus.ipc_client import fetch_bucket_env
-from pyargus.load_env import LoadEnvResult, load_env
 
 __all__ = [
     "ArgusConnectionError",
