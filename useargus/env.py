@@ -10,8 +10,8 @@ from typing import Literal
 
 from dotenv import dotenv_values
 
-from pyargus.errors import ArgusLockedError
-from pyargus.ipc_client import fetch_bucket_env
+from useargus.errors import ArgusLockedError
+from useargus.ipc_client import fetch_bucket_env
 
 LoadEnvSource = Literal["bucket", "dotenv"]
 
@@ -95,7 +95,7 @@ def load_env(
         return LoadEnvResult(source="bucket", keys=keys)
     except ArgusLockedError as exc:
         if fallback_on_locked:
-            warnings.warn(f"[pyargus] {exc}; loading .env only", stacklevel=2)
+            warnings.warn(f"[useargus] {exc}; loading .env only", stacklevel=2)
             keys = _apply_to_environ(parsed, override)
             return LoadEnvResult(source="dotenv", keys=keys)
         raise

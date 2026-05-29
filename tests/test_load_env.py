@@ -1,4 +1,4 @@
-"""Tests for pyargus.env."""
+"""Tests for useargus.env."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pyargus.env import load_env
-from pyargus.errors import ArgusConnectionError, ArgusLockedError
+from useargus.env import load_env
+from useargus.errors import ArgusConnectionError, ArgusLockedError
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +41,7 @@ def test_load_env_reads_bucket_credentials_from_dotenv_before_ipc(
     )
 
     with patch(
-        "pyargus.env.fetch_bucket_env",
+        "useargus.env.fetch_bucket_env",
         side_effect=ArgusConnectionError("Argus socket not found"),
     ):
         with pytest.raises((ArgusConnectionError, ArgusLockedError)):
@@ -56,7 +56,7 @@ def test_dotenv_overrides_bucket_values(tmp_path: Path, monkeypatch: pytest.Monk
     )
 
     with patch(
-        "pyargus.env.fetch_bucket_env",
+        "useargus.env.fetch_bucket_env",
         return_value={"FOO": "from_bucket", "BAR": "bucket_only"},
     ):
         result = load_env()
@@ -76,7 +76,7 @@ def test_fallback_on_locked_loads_dotenv_only(
     )
 
     with patch(
-        "pyargus.env.fetch_bucket_env",
+        "useargus.env.fetch_bucket_env",
         side_effect=ArgusLockedError("signed out"),
     ):
         with pytest.warns(UserWarning, match="loading .env only"):

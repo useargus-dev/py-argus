@@ -1,5 +1,5 @@
 [project]
-name = "pyargus"
+name = "useargus"
 version = "0.1.0"
 description = "Load environment variables from Argus via IPC, with .env fallback"
 readme = "README.md"
@@ -48,7 +48,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/pyargus",
+    "/useargus",
     "/README.md",
     "/LICENSE",
 ]
@@ -63,7 +63,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-packages = ["pyargus"]
+packages = ["useargus"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

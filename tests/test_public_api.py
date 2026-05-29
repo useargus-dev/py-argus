@@ -1,6 +1,6 @@
 """Public API surface tests."""
 
-from pyargus import (
+from useargus import (
     ArgusConnectionError,
     ArgusDeniedError,
     ArgusError,
