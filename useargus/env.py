@@ -12,6 +12,7 @@ from dotenv import dotenv_values
 
 from useargus.errors import ArgusLockedError
 from useargus.ipc_client import fetch_bucket_env
+from useargus import state
 
 LoadEnvSource = Literal["bucket", "dotenv"]
 
@@ -62,7 +63,10 @@ def load_env(
     fallback_on_locked: bool = False,
 ) -> LoadEnvResult:
     """
-    Load environment variables into os.environ.
+    Load environment variables into os.environ (secrets only).
+
+    Does not enable HTTP proxy or TLS patches. Call :func:`configure` after
+    ``load_env()`` when the bucket has Argus Proxy enabled.
 
     1. Parse .env (does not apply yet).
     2. If ARGUS_BUCKET_ID and ARGUS_BUCKET_TOKEN are set (OS env or .env),
@@ -77,23 +81,27 @@ def load_env(
     bucket_id, token = _bucket_credentials(parsed)
 
     if not bucket_id or not token:
+        state.set_cached_proxy(None)
         keys = _apply_to_environ(parsed, override)
         return LoadEnvResult(source="dotenv", keys=keys)
 
     try:
-        bucket_env = fetch_bucket_env(
+        bucket_result = fetch_bucket_env(
             bucket_id=bucket_id,
             client_token=token,
             timeout_ms=timeout_ms,
         )
 
-        for key, value in bucket_env.items():
+        for key, value in bucket_result.env.items():
             os.environ[key] = value
 
+        state.set_cached_proxy(bucket_result.proxy)
+
         keys_from_dotenv = _apply_to_environ(parsed, override=True)
-        keys = list(dict.fromkeys([*bucket_env.keys(), *keys_from_dotenv]))
+        keys = list(dict.fromkeys([*bucket_result.env.keys(), *keys_from_dotenv]))
         return LoadEnvResult(source="bucket", keys=keys)
     except ArgusLockedError as exc:
+        state.set_cached_proxy(None)
         if fallback_on_locked:
             warnings.warn(f"[useargus] {exc}; loading .env only", stacklevel=2)
             keys = _apply_to_environ(parsed, override)

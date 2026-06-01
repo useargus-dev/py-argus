@@ -24,6 +24,8 @@ from useargus import load_env
 load_env()
 ```
 
+When the bucket has **Argus Proxy** enabled, call `configure()` after `load_env()` to route HTTP through Argus (env vars, `ssl`, `aiohttp`, and **`requests`** patches). Proxy-enabled mappings receive `argus-proxy-*` placeholders instead of real API keys.
+
 ### Migration from python-dotenv
 
 ```python
@@ -58,10 +60,10 @@ Copy `.env.example` to get started.
 
 ### Argus app lock vs sign-out
 
-| State | IPC |
-|--------|-----|
-| Signed in, idle app lock | Works — approval popup may appear for new clients |
-| Signed out | Returns `locked` — use `fallback_on_locked=True` to load `.env` only |
+| State                    | IPC                                                                  |
+| ------------------------ | -------------------------------------------------------------------- |
+| Signed in, idle app lock | Works — approval popup may appear for new clients                    |
+| Signed out               | Returns `locked` — use `fallback_on_locked=True` to load `.env` only |
 
 Idle **app lock** does **not** block IPC. Only **sign-out** returns IPC `locked`.
 
@@ -87,6 +89,25 @@ result = load_env(
 # result.keys — names set (never values)
 ```
 
+### `configure(client=None)`
+
+Call after `load_env()` when the bucket has Argus Proxy enabled:
+
+```python
+from useargus import load_env, configure
+
+load_env()
+configure()  # global proxy + CA for requests, httpx (ssl), aiohttp, etc.
+
+# Optional: configure a specific client
+import httpx
+client = configure(httpx.Client(timeout=30))
+```
+
+### `load_proxies(...)` (deprecated)
+
+Use `configure()` instead. Kept for backward compatibility (requests-only fallback when proxy env is set manually).
+
 ### `fetch_bucket_env(...)`
 
 Lower-level IPC call if you only need the bucket map:
@@ -104,12 +125,23 @@ env = fetch_bucket_env(
 
 ### Errors
 
-| Error | When |
-|--------|------|
-| `ArgusConnectionError` | Socket missing, Argus not running |
-| `ArgusLockedError` | Argus signed out (`status: locked`) |
-| `ArgusDeniedError` | User denied or approval timed out |
-| `ArgusError` | Invalid token, bad request, etc. |
+All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch specific types for programmatic handling:
+
+| Error | Argus IPC | When |
+| ----- | --------- | ---- |
+| `ArgusConnectionError` | — | Socket/pipe missing, timeout, connection closed |
+| `ArgusLockedError` | `status: locked` | Argus signed out |
+| `ArgusApprovalDeniedError` | `denied` + `APPROVAL_DENIED` | User rejected client access |
+| `ArgusApprovalTimeoutError` | `denied` + `APPROVAL_TIMEOUT` | Approval dialog timed out (120s) |
+| `ArgusBucketNotFoundError` | `BUCKET_NOT_FOUND` | Wrong `ARGUS_BUCKET_ID` |
+| `ArgusInvalidTokenError` | `INVALID_TOKEN` | Wrong or rotated `ARGUS_BUCKET_TOKEN` |
+| `ArgusBucketInactiveError` | `BUCKET_INACTIVE` | Bucket paused in Argus |
+| `ArgusPeerResolveError` | `PEER_RESOLVE` | Argus could not identify this process |
+| `ArgusProxyError` | `PROXY_ERROR` | Proxy enabled but misconfigured |
+| `ArgusInvalidRequestError` | `INVALID_REQUEST` | Malformed IPC request |
+| `ArgusInvalidResponseError` | — | Unexpected Argus response |
+| `ArgusConfigureError` | — | `configure()` preconditions or unsupported client |
+| `ArgusError` | other `error` codes | `DB_ERROR`, `INTERNAL_ERROR`, etc. |
 
 ## Development
 

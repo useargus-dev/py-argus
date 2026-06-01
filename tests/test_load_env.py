@@ -10,6 +10,7 @@ import pytest
 
 from useargus.env import load_env
 from useargus.errors import ArgusConnectionError, ArgusLockedError
+from useargus.ipc_client import FetchBucketEnvResult
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +58,10 @@ def test_dotenv_overrides_bucket_values(tmp_path: Path, monkeypatch: pytest.Monk
 
     with patch(
         "useargus.env.fetch_bucket_env",
-        return_value={"FOO": "from_bucket", "BAR": "bucket_only"},
+        return_value=FetchBucketEnvResult(
+            env={"FOO": "from_bucket", "BAR": "bucket_only"},
+            proxy=None,
+        ),
     ):
         result = load_env()
 
