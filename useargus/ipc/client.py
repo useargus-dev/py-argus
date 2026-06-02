@@ -91,22 +91,36 @@ def _send_unix(payload: dict[str, Any], timeout_ms: int) -> str:
 
 
 def _send_windows(payload: dict[str, Any], timeout_ms: int) -> str:
-    del timeout_ms
+    import concurrent.futures
+
     line = (json.dumps(payload) + "\n").encode("utf-8")
-    try:
+    timeout_s = timeout_ms / 1000.0
+
+    def _exchange() -> str:
         with open(r"\\.\pipe\argus", "r+b", buffering=0) as pipe:
             pipe.write(line)
             pipe.flush()
             response = pipe.readline()
             if not response:
                 raise ArgusConnectionError(
-                    "Argus closed the connection without a response. " + _connection_hint()
+                    "Argus closed the connection without a response. "
+                    + _connection_hint()
                 )
             return response.decode("utf-8").strip()
-    except ArgusError:
-        raise
-    except OSError as exc:
-        raise ArgusConnectionError(f"{exc}. {_connection_hint()}") from exc
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_exchange)
+        try:
+            return future.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError as exc:
+            raise ArgusConnectionError(
+                f"Timed out after {timeout_ms}ms waiting for Argus IPC response. "
+                "If this is the first connection, approve the client in Argus (up to 120s)."
+            ) from exc
+        except ArgusError:
+            raise
+        except OSError as exc:
+            raise ArgusConnectionError(f"{exc}. {_connection_hint()}") from exc
 
 
 def _parse_proxy(raw: Any) -> ProxyConfig | None:

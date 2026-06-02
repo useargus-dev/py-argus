@@ -1,17 +1,17 @@
-"""Tests for useargus.configure."""
+"""Tests for explicit proxy factories."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from useargus.proxy.configure import configure
 from useargus.errors import ArgusConfigureError
 from useargus.ipc.client import ProxyConfig
 from useargus.proxy import state
+from useargus.proxy.configure import configure
+from useargus.proxy.factories import create_proxy_agents, httpx_client, requests_session
 
 
 @pytest.fixture(autouse=True)
@@ -21,61 +21,65 @@ def clear_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "HTTP_PROXY",
         "HTTPS_PROXY",
         "REQUESTS_CA_BUNDLE",
-        "SSL_CERT_FILE",
         "ARGUS_BUCKET_ID",
         "ARGUS_BUCKET_TOKEN",
     ):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_configure_raises_without_proxy() -> None:
-    with pytest.raises(ArgusConfigureError, match="not available"):
-        configure()
-
-
-def test_configure_applies_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _sample_proxy(tmp_path: Path) -> ProxyConfig:
     ca = tmp_path / "ca.pem"
     ca.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
-    proxy = ProxyConfig(
+    return ProxyConfig(
         enabled=True,
         http_proxy="http://tok@127.0.0.1:9000",
         https_proxy="http://tok@127.0.0.1:9000",
         no_proxy="localhost",
         ca_bundle_path=str(ca),
     )
-    state.set_cached_proxy(proxy)
 
-    result = configure()
 
+def test_configure_warns_without_client(tmp_path: Path) -> None:
+    state.set_cached_proxy(_sample_proxy(tmp_path))
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        result = configure()
     assert result.proxy_enabled is True
-    assert os.environ["HTTPS_PROXY"] == proxy.https_proxy
-    assert os.environ["REQUESTS_CA_BUNDLE"] == str(ca)
+    assert result.globals_applied is False
+    assert "HTTP_PROXY" not in os.environ
 
 
-def test_load_env_caches_proxy_without_applying(
+def test_create_proxy_agents(tmp_path: Path) -> None:
+    proxy = _sample_proxy(tmp_path)
+    state.set_cached_proxy(proxy)
+    agents = create_proxy_agents()
+    assert agents.proxy_url == proxy.https_proxy
+    assert agents.ca_bundle_path == proxy.ca_bundle_path
+    assert agents.proxy_basic_header.startswith("Basic ")
+
+
+def test_requests_session_explicit(tmp_path: Path) -> None:
+    proxy = _sample_proxy(tmp_path)
+    session = requests_session(proxy)
+    assert session.proxies["https"] == proxy.https_proxy
+    assert session.verify == proxy.ca_bundle_path
+    assert session.trust_env is False
+
+
+def test_httpx_client_explicit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from useargus.env.load import load_env
-    from useargus.ipc.client import FetchBucketEnvResult
+    import ssl
 
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text(
-        "ARGUS_BUCKET_ID=test-id\nARGUS_BUCKET_TOKEN=test-token\n",
-        encoding="utf-8",
+    monkeypatch.setattr(
+        "useargus.proxy.factories.build_ssl_context",
+        lambda _path: ssl.create_default_context(),
     )
-    proxy = ProxyConfig(
-        enabled=True,
-        http_proxy="http://tok@127.0.0.1:9000",
-        https_proxy="http://tok@127.0.0.1:9000",
-        no_proxy="localhost",
-        ca_bundle_path="/tmp/ca.pem",
-    )
+    proxy = _sample_proxy(tmp_path)
+    client = httpx_client(proxy, timeout=30)
+    assert client._trust_env is False  # noqa: SLF001
+    client.close()
 
-    with patch(
-        "useargus.env.load.fetch_bucket_env",
-        return_value=FetchBucketEnvResult(env={"API_KEY": "x"}, proxy=proxy),
-    ):
-        load_env()
 
-    assert state.get_cached_proxy() == proxy
-    assert "HTTP_PROXY" not in os.environ
+def test_configure_raises_without_proxy() -> None:
+    with pytest.raises(ArgusConfigureError, match="not available"):
+        configure()

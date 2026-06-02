@@ -24,7 +24,7 @@ from useargus import load_env
 load_env()
 ```
 
-When the bucket has **Argus Proxy** enabled, call `configure()` after `load_env()` to route HTTP through Argus (env vars, `ssl`, `aiohttp`, and **`requests`** patches). Proxy-enabled mappings receive `argus-proxy-*` placeholders instead of real API keys.
+When the bucket has **Argus Proxy** enabled, wire **your HTTP client explicitly** after `load_env()` (see [Proxy cookbook](#proxy-cookbook)). Proxy-enabled mappings receive `argus-proxy-*` placeholders instead of real API keys.
 
 ### Migration from python-dotenv
 
@@ -89,24 +89,26 @@ result = load_env(
 # result.keys — names set (never values)
 ```
 
-### `configure(client=None)`
+### Proxy factories (preferred)
 
-Call after `load_env()` when the bucket has Argus Proxy enabled:
+After `load_env()`, use one factory per HTTP library — **no global monkey patches**:
 
-```python
-from useargus import load_env, configure
+| Factory | Use with |
+|---------|----------|
+| `create_proxy_agents()` | Low-level proxy URL + CA + auth header |
+| `requests_session()` | `requests` |
+| `httpx_client()` / `httpx_async_client()` | `httpx` |
+| `anthropic_http_client()` | `anthropic` SDK, LangChain |
+| `aiohttp_session()` | `aiohttp` |
+| `ssl_context()` | `urllib` / `http.client` |
 
-load_env()
-configure()  # global proxy + CA for requests, httpx (ssl), aiohttp, etc.
+### `configure(client=None)` (deprecated)
 
-# Optional: configure a specific client
-import httpx
-client = configure(httpx.Client(timeout=30))
-```
+`configure()` without arguments is **deprecated** (warns; removed next major). Use factories above.
 
 ### `load_proxies(...)` (deprecated)
 
-Use `configure()` instead. Kept for backward compatibility (requests-only fallback when proxy env is set manually).
+Use factory helpers instead.
 
 ### `fetch_bucket_env(...)`
 
@@ -143,13 +145,93 @@ All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch sp
 | `ArgusConfigureError` | — | `configure()` preconditions or unsupported client |
 | `ArgusError` | other `error` codes | `DB_ERROR`, `INTERNAL_ERROR`, etc. |
 
+## Proxy cookbook
+
+Call `load_env()` first in every example.
+
+### `requests`
+
+```python
+from useargus import load_env, requests_session
+
+load_env()
+session = requests_session()
+session.get("https://api.anthropic.com/v1/models", headers={...})
+```
+
+### `httpx`
+
+```python
+from useargus import load_env, httpx_client
+
+load_env()
+client = httpx_client(timeout=30)
+client.get("https://api.anthropic.com/v1/models", headers={...})
+client.close()
+```
+
+### `anthropic` SDK
+
+```python
+from anthropic import Anthropic
+from useargus import load_env, anthropic_http_client
+
+load_env()
+client = Anthropic(http_client=anthropic_http_client(timeout=60))
+```
+
+### LangChain (`langchain-anthropic`)
+
+```python
+from anthropic import Anthropic
+from langchain_anthropic import ChatAnthropic
+from useargus import load_env, anthropic_http_client
+
+load_env()
+anthropic = Anthropic(
+    api_key=os.environ["ANTHROPIC_API_KEY"],
+    http_client=anthropic_http_client(timeout=60),
+)
+llm = ChatAnthropic(model="claude-sonnet-4-5", client=anthropic)
+```
+
+### `aiohttp`
+
+```python
+from useargus import load_env, aiohttp_session
+
+load_env()
+session = aiohttp_session()
+async with session.get("https://api.anthropic.com/v1/models", headers={...}) as r:
+    ...
+```
+
+### `urllib` / stdlib
+
+```python
+import urllib.request
+from useargus import load_env, create_proxy_agents, ssl_context
+
+load_env()
+agents = create_proxy_agents()
+ctx = ssl_context()
+opener = urllib.request.build_opener(
+    urllib.request.ProxyHandler({"https": agents.proxy_url}),
+    urllib.request.HTTPSHandler(context=ctx),
+)
+```
+
+### BAML
+
+Configure the HTTP client BAML uses (typically `httpx_client()`) and pass it to your generated client setup.
+
 ## Package layout
 
 Internal modules (public exports unchanged):
 
 - `useargus/env/load.py` — `load_env`
-- `useargus/proxy/configure.py` — `configure`
-- `useargus/proxy/undici.py` — requests patches / deprecated `load_proxies`
+- `useargus/proxy/factories.py` — explicit proxy wiring
+- `useargus/proxy/config.py` — `get_proxy_config`, `require_proxy_config`
 - `useargus/ipc/client.py` — IPC client
 - `useargus/errors.py` — error types
 

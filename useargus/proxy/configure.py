@@ -1,138 +1,50 @@
-"""Configure Argus HTTP proxy and TLS trust for the current process."""
+"""Deprecated configure() wrapper — prefer explicit factories."""
 
 from __future__ import annotations
 
-import os
-import ssl
+import warnings
 from dataclasses import dataclass
 from typing import Any, overload
 
 from useargus.errors import ArgusConfigureError
-from useargus.ipc.client import ProxyConfig, apply_proxy_to_environ, fetch_bucket_env
-from useargus.proxy.state import (
-    get_cached_proxy,
-    set_cached_proxy,
+from useargus.proxy.config import require_proxy_config
+from useargus.proxy.factories import (
+    aiohttp_session,
+    httpx_async_client,
+    httpx_client,
+    requests_session,
 )
-from useargus.proxy.undici import apply_requests_proxy_patches
 
-_globals_applied = False
-_ssl_patched = False
-_aiohttp_patched = False
-_orig_ssl_create_default_context: Any = None
+_DEPRECATION = (
+    "[useargus] configure() with no arguments is deprecated and will be removed "
+    "in the next major. Use explicit factories: create_proxy_agents(), "
+    "requests_session(), httpx_client(), anthropic_http_client(), aiohttp_session(). "
+    "See README cookbook."
+)
 
 
 @dataclass(frozen=True)
 class ConfigureResult:
-    """Result of configure(); never includes secret values."""
+    """Result of deprecated configure(); never includes secret values."""
 
     proxy_enabled: bool
     globals_applied: bool
     client_configured: bool
 
 
-def _bucket_credentials() -> tuple[str | None, str | None]:
-    return (
-        os.environ.get("ARGUS_BUCKET_ID"),
-        os.environ.get("ARGUS_BUCKET_TOKEN"),
-    )
-
-
-def _resolve_proxy_config() -> ProxyConfig | None:
-    cached = get_cached_proxy()
-    if cached is not None:
-        return cached
-
-    bucket_id, token = _bucket_credentials()
-    if not bucket_id or not token:
-        return None
-
-    result = fetch_bucket_env(bucket_id=bucket_id, client_token=token)
-    set_cached_proxy(result.proxy)
-    return result.proxy
-
-
-def _patch_ssl_context(ca_bundle_path: str) -> None:
-    global _ssl_patched, _orig_ssl_create_default_context
-    if _ssl_patched:
-        return
-
-    _orig_ssl_create_default_context = ssl.create_default_context
-
-    def _argus_create_default_context(*args: Any, **kwargs: Any) -> ssl.SSLContext:
-        ctx = _orig_ssl_create_default_context(*args, **kwargs)
-        ctx.load_verify_locations(cafile=ca_bundle_path)
-        return ctx
-
-    ssl.create_default_context = _argus_create_default_context  # type: ignore[assignment]
-    _ssl_patched = True
-
-
-def _load_real_aiohttp_module() -> Any | None:
-    """Import aiohttp from site-packages (skip shadowed local .py files)."""
-    import importlib.util
-
-    spec = importlib.util.find_spec("aiohttp")
-    if spec is None or not spec.origin:
-        return None
-    origin = spec.origin.replace("\\", "/")
-    if "/site-packages/" not in origin and "/dist-packages/" not in origin:
-        return None
-    return importlib.import_module("aiohttp")
-
-
-def _patch_aiohttp_default_trust_env() -> None:
-    global _aiohttp_patched
-    if _aiohttp_patched:
-        return
-
-    aiohttp = _load_real_aiohttp_module()
-    if aiohttp is None or not hasattr(aiohttp, "ClientSession"):
-        return
-
-    _orig_init = aiohttp.ClientSession.__init__
-
-    def _session_init(self: Any, *args: Any, trust_env: bool = True, **kwargs: Any) -> None:
-        _orig_init(self, *args, trust_env=trust_env, **kwargs)
-
-    aiohttp.ClientSession.__init__ = _session_init  # type: ignore[method-assign]
-    _aiohttp_patched = True
-
-
-def _apply_global_proxy(proxy: ProxyConfig) -> None:
-    global _globals_applied
-    if not proxy.enabled:
-        raise ArgusConfigureError(
-            "Argus proxy is disabled for this bucket. Enable it in Argus bucket settings."
-        )
-
-    apply_proxy_to_environ(proxy)
-    _patch_ssl_context(proxy.ca_bundle_path)
-    _patch_aiohttp_default_trust_env()
-    apply_requests_proxy_patches()
-    _globals_applied = True
-
-
-def _build_ssl_context(ca_bundle_path: str) -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
-    ctx.load_verify_locations(cafile=ca_bundle_path)
-    return ctx
-
-
-def _proxy_url(proxy: ProxyConfig) -> str:
-    return proxy.https_proxy or proxy.http_proxy
-
-
-def _configure_client(client: Any, proxy: ProxyConfig) -> Any:
-    proxy_url = _proxy_url(proxy)
-    ca_path = proxy.ca_bundle_path
-
+def _configure_client(client: Any) -> Any:
     try:
         import requests
 
         if isinstance(client, requests.Session):
-            client.proxies.update({"http": proxy_url, "https": proxy_url})
-            client.verify = ca_path
+            configured = requests_session()
+            client.proxies.update(configured.proxies)
+            client.verify = configured.verify
             client.trust_env = False
+            for scheme in ("https://", "http://"):
+                adapter = configured.get_adapter(scheme)
+                if adapter is not None:
+                    client.mount(scheme, adapter)
             return client
     except ImportError:
         pass
@@ -141,17 +53,13 @@ def _configure_client(client: Any, proxy: ProxyConfig) -> Any:
         import httpx
 
         if isinstance(client, httpx.Client):
-            return httpx.Client(
-                proxy=proxy_url,
-                verify=ca_path,
+            return httpx_client(
                 timeout=client.timeout,
                 headers=dict(client.headers),
                 follow_redirects=client.follow_redirects,
             )
         if isinstance(client, httpx.AsyncClient):
-            return httpx.AsyncClient(
-                proxy=proxy_url,
-                verify=ca_path,
+            return httpx_async_client(
                 timeout=client.timeout,
                 headers=dict(client.headers),
                 follow_redirects=client.follow_redirects,
@@ -162,26 +70,26 @@ def _configure_client(client: Any, proxy: ProxyConfig) -> Any:
     try:
         import aiohttp
 
-        ssl_ctx = _build_ssl_context(ca_path)
         if isinstance(client, aiohttp.TCPConnector):
-            return aiohttp.TCPConnector(ssl=ssl_ctx)
+            from useargus.proxy.factories import aiohttp_connector
+
+            return aiohttp_connector()
         if isinstance(client, aiohttp.ClientSession):
-            return aiohttp.ClientSession(
-                trust_env=True,
-                connector=aiohttp.TCPConnector(ssl=ssl_ctx),
-            )
+            return aiohttp_session()
     except ImportError:
         pass
 
-    if isinstance(client, ssl.SSLContext):
-        client.load_verify_locations(cafile=ca_path)
+    import ssl as ssl_mod
+
+    if isinstance(client, ssl_mod.SSLContext):
+        agents = require_proxy_config()
+        client.load_verify_locations(cafile=agents.ca_bundle_path)
         return client
 
     raise ArgusConfigureError(
-        f"configure() does not support {type(client).__name__}. "
-        "Supported types: requests.Session, httpx.Client, httpx.AsyncClient, "
-        "aiohttp.ClientSession, aiohttp.TCPConnector, ssl.SSLContext. "
-        "Call configure() with no arguments for global proxy patches only."
+        f"configure(client) does not support {type(client).__name__}. "
+        "Use requests_session(), httpx_client(), anthropic_http_client(), or aiohttp_session(). "
+        "See README cookbook."
     )
 
 
@@ -195,35 +103,19 @@ def configure(client: Any) -> Any: ...
 
 def configure(client: Any | None = None) -> ConfigureResult | Any:
     """
-    Enable Argus HTTP proxy and MITM CA trust for this process.
+    @deprecated Use explicit factory helpers instead.
 
-    Call after :func:`load_env` when the bucket has proxy enabled.
-
-    With no argument, applies global patches only (env vars, ``ssl``,
-    ``aiohttp`` defaults, ``requests``).
-
-    With a client argument, applies globals and returns a configured client
-    (new instance for httpx/aiohttp when immutable).
+    With a client, returns a configured client (no global patches).
+    With no argument, warns and returns metadata only.
     """
-    proxy = _resolve_proxy_config()
-    if proxy is None:
-        raise ArgusConfigureError(
-            "Argus proxy config is not available. Call load_env() first with valid "
-            "ARGUS_BUCKET_ID and ARGUS_BUCKET_TOKEN, or ensure Argus is signed in."
-        )
-    if not proxy.enabled:
-        raise ArgusConfigureError(
-            "Argus proxy is disabled for this bucket. Enable 'Argus Proxy' in Argus "
-            "bucket settings, then call load_env() and configure() again."
-        )
-
-    _apply_global_proxy(proxy)
+    require_proxy_config()
 
     if client is None:
+        warnings.warn(_DEPRECATION, DeprecationWarning, stacklevel=2)
         return ConfigureResult(
             proxy_enabled=True,
-            globals_applied=True,
+            globals_applied=False,
             client_configured=False,
         )
 
-    return _configure_client(client, proxy)
+    return _configure_client(client)
