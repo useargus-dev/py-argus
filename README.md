@@ -2,6 +2,8 @@
 
 Load environment variables from [Argus](https://github.com/useargus-dev) over local IPC, with `.env` fallback — similar to `python-dotenv`, but secrets come from your Argus bucket when the desktop app is running.
 
+**v0.2** — supports Argus Proxy factories so real API keys never need to sit in `os.environ`.
+
 ## Requirements
 
 - **Python** 3.10+
@@ -14,6 +16,37 @@ Load environment variables from [Argus](https://github.com/useargus-dev) over lo
 pip install useargus
 ```
 
+## Usage modes
+
+### Without Argus Proxy
+
+When proxy is **disabled** on the bucket, `load_env()` injects **real secret values** into `os.environ`. Use any HTTP client normally:
+
+```python
+import os
+import httpx
+from useargus import load_env
+
+load_env()
+
+with httpx.Client() as client:
+    client.get("https://api.example.com", headers={"Authorization": f"Bearer {os.environ['API_KEY']}"})
+```
+
+### With Argus Proxy enabled
+
+When proxy is **enabled**, proxy mappings receive **`argus-proxy-*` placeholders** — not real keys. Call `load_env()` then wire **one factory per HTTP library**:
+
+```python
+from useargus import load_env, httpx_client
+
+load_env()
+client = httpx_client(timeout=60)
+# Traffic routes through 127.0.0.1; Argus rewrites placeholders upstream
+```
+
+See [Proxy cookbook](#proxy-cookbook) for requests, Anthropic SDK, aiohttp, and more.
+
 ## Usage
 
 Call `load_env()` **before** other modules read `os.environ`:
@@ -24,7 +57,7 @@ from useargus import load_env
 load_env()
 ```
 
-When the bucket has **Argus Proxy** enabled, wire **your HTTP client explicitly** after `load_env()` (see [Proxy cookbook](#proxy-cookbook)). Proxy-enabled mappings receive `argus-proxy-*` placeholders instead of real API keys.
+When the bucket has **Argus Proxy** enabled, wire **your HTTP client explicitly** after `load_env()` (see [Usage modes](#usage-modes) and [Proxy cookbook](#proxy-cookbook)).
 
 ### Migration from python-dotenv
 
@@ -183,6 +216,7 @@ client = Anthropic(http_client=anthropic_http_client(timeout=60))
 ### LangChain (`langchain-anthropic`)
 
 ```python
+import os
 from anthropic import Anthropic
 from langchain_anthropic import ChatAnthropic
 from useargus import load_env, anthropic_http_client
