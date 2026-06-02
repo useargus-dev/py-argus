@@ -1,7 +1,6 @@
 """Load environment variables from Argus via local IPC."""
 
-from useargus.configure import ConfigureResult, configure
-from useargus.env import LoadEnvResult, load_env
+from useargus.env.load import LoadEnvResult, load_env
 from useargus.errors import (
     ArgusApprovalDeniedError,
     ArgusApprovalTimeoutError,
@@ -18,8 +17,9 @@ from useargus.errors import (
     ArgusPeerResolveError,
     ArgusProxyError,
 )
-from useargus.ipc_client import fetch_bucket_env
-from useargus.proxies import load_proxies
+from useargus.ipc.client import fetch_bucket_env
+from useargus.proxy.configure import ConfigureResult, configure
+from useargus.proxy.undici import load_proxies
 
 __all__ = [
     "ArgusApprovalDeniedError",

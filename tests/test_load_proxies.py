@@ -8,13 +8,13 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from useargus.proxies import load_proxies
+from useargus.proxy.undici import load_proxies
 
 
 @pytest.fixture(autouse=True)
 def clear_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    import useargus.proxies as proxies_mod
-    from useargus import state
+    import useargus.proxy.undici as proxies_mod
+    from useargus.proxy import state
 
     state.clear_cached_proxy()
     proxies_mod._proxies_map = None
@@ -64,7 +64,7 @@ def test_load_proxies_injects_proxies_and_verify(
         )
         raise RuntimeError("stop")
 
-    import useargus.proxies as proxies_mod
+    import useargus.proxy.undici as proxies_mod
 
     with patch.object(proxies_mod, "_orig_session_request", capture_request):
         with pytest.raises(RuntimeError, match="stop"):
@@ -78,7 +78,7 @@ def test_load_proxies_prepares_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTPS_PROXY", "http://token@127.0.0.1:9000")
     load_proxies()
 
-    import useargus.proxies as proxies_mod
+    import useargus.proxy.undici as proxies_mod
 
     session = requests.Session()
     proxies_mod._prepare_argus_session(session)

@@ -143,6 +143,16 @@ All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch sp
 | `ArgusConfigureError` | — | `configure()` preconditions or unsupported client |
 | `ArgusError` | other `error` codes | `DB_ERROR`, `INTERNAL_ERROR`, etc. |
 
+## Package layout
+
+Internal modules (public exports unchanged):
+
+- `useargus/env/load.py` — `load_env`
+- `useargus/proxy/configure.py` — `configure`
+- `useargus/proxy/undici.py` — requests patches / deprecated `load_proxies`
+- `useargus/ipc/client.py` — IPC client
+- `useargus/errors.py` — error types
+
 ## Development
 
 ```bash

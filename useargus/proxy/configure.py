@@ -8,9 +8,12 @@ from dataclasses import dataclass
 from typing import Any, overload
 
 from useargus.errors import ArgusConfigureError
-from useargus.ipc_client import ProxyConfig, apply_proxy_to_environ, fetch_bucket_env
-from useargus.proxies import apply_requests_proxy_patches
-from useargus import state
+from useargus.ipc.client import ProxyConfig, apply_proxy_to_environ, fetch_bucket_env
+from useargus.proxy.state import (
+    get_cached_proxy,
+    set_cached_proxy,
+)
+from useargus.proxy.undici import apply_requests_proxy_patches
 
 _globals_applied = False
 _ssl_patched = False
@@ -35,7 +38,7 @@ def _bucket_credentials() -> tuple[str | None, str | None]:
 
 
 def _resolve_proxy_config() -> ProxyConfig | None:
-    cached = state.get_cached_proxy()
+    cached = get_cached_proxy()
     if cached is not None:
         return cached
 
@@ -44,7 +47,7 @@ def _resolve_proxy_config() -> ProxyConfig | None:
         return None
 
     result = fetch_bucket_env(bucket_id=bucket_id, client_token=token)
-    state.set_cached_proxy(result.proxy)
+    set_cached_proxy(result.proxy)
     return result.proxy
 
 

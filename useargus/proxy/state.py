@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from useargus.ipc_client import ProxyConfig
+from useargus.ipc.client import ProxyConfig
 
 _cached_proxy: ProxyConfig | None = None
 

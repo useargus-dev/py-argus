@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from useargus.configure import configure
+from useargus.proxy.configure import configure
 from useargus.errors import ArgusConfigureError
-from useargus.ipc_client import ProxyConfig
-from useargus import state
+from useargus.ipc.client import ProxyConfig
+from useargus.proxy import state
 
 
 @pytest.fixture(autouse=True)
@@ -55,8 +55,8 @@ def test_configure_applies_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 def test_load_env_caches_proxy_without_applying(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from useargus.env import load_env
-    from useargus.ipc_client import FetchBucketEnvResult
+    from useargus.env.load import load_env
+    from useargus.ipc.client import FetchBucketEnvResult
 
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
@@ -72,7 +72,7 @@ def test_load_env_caches_proxy_without_applying(
     )
 
     with patch(
-        "useargus.env.fetch_bucket_env",
+        "useargus.env.load.fetch_bucket_env",
         return_value=FetchBucketEnvResult(env={"API_KEY": "x"}, proxy=proxy),
     ):
         load_env()

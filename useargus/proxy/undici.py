@@ -131,7 +131,7 @@ def load_proxies(
 
     Applies requests patches only; does not patch ssl/aiohttp globally.
     """
-    from useargus.configure import configure
+    from useargus.proxy.configure import configure
     from useargus.errors import ArgusConfigureError
 
     try:
