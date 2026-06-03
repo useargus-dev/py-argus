@@ -132,10 +132,10 @@ from useargus import argus_httpx_config, create_argus_requests_proxy_adapter
 client = httpx.Client(**argus_httpx_config(), timeout=60)
 ```
 
-| Kind | Functions |
-| ---- | --------- |
-| Config | `argus_requests_config()`, `argus_httpx_config()`, `argus_aiohttp_config()`, `argus_urllib_config()` |
-| Builders | `create_argus_requests_proxy_adapter()` / `create_argus_requests_proxy_adapter_class()` |
+| Kind     | Functions                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| Config   | `argus_requests_config()`, `argus_httpx_config()`, `argus_aiohttp_config()`, `argus_urllib_config()` |
+| Builders | `create_argus_requests_proxy_adapter()` / `create_argus_requests_proxy_adapter_class()`              |
 
 Per-library copy-paste examples: **[docs/usage/](./docs/usage/README.md)**
 
@@ -160,21 +160,21 @@ env = fetch_bucket_env(
 
 All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch specific types for programmatic handling:
 
-| Error                       | Argus IPC                     | When                                              |
-| --------------------------- | ----------------------------- | ------------------------------------------------- |
-| `ArgusConnectionError`      | —                             | Socket/pipe missing, timeout, connection closed   |
-| `ArgusLockedError`          | `status: locked`              | Argus signed out                                  |
-| `ArgusApprovalDeniedError`  | `denied` + `APPROVAL_DENIED`  | User rejected client access                       |
-| `ArgusApprovalTimeoutError` | `denied` + `APPROVAL_TIMEOUT` | Approval dialog timed out (120s)                  |
-| `ArgusBucketNotFoundError`  | `BUCKET_NOT_FOUND`            | Wrong `ARGUS_BUCKET_ID`                           |
-| `ArgusInvalidTokenError`    | `INVALID_TOKEN`               | Wrong or rotated `ARGUS_BUCKET_TOKEN`             |
-| `ArgusBucketInactiveError`  | `BUCKET_INACTIVE`             | Bucket paused in Argus                            |
-| `ArgusPeerResolveError`     | `PEER_RESOLVE`                | Argus could not identify this process             |
-| `ArgusProxyError`           | `PROXY_ERROR`                 | Proxy enabled but misconfigured                   |
-| `ArgusInvalidRequestError`  | `INVALID_REQUEST`             | Malformed IPC request                             |
-| `ArgusInvalidResponseError` | —                             | Unexpected Argus response                         |
-| `ArgusConfigureError`       | —                             | Proxy unavailable or disabled for bucket          |
-| `ArgusError`                | other `error` codes           | `DB_ERROR`, `INTERNAL_ERROR`, etc.                |
+| Error                       | Argus IPC                     | When                                            |
+| --------------------------- | ----------------------------- | ----------------------------------------------- |
+| `ArgusConnectionError`      | —                             | Socket/pipe missing, timeout, connection closed |
+| `ArgusLockedError`          | `status: locked`              | Argus signed out                                |
+| `ArgusApprovalDeniedError`  | `denied` + `APPROVAL_DENIED`  | User rejected client access                     |
+| `ArgusApprovalTimeoutError` | `denied` + `APPROVAL_TIMEOUT` | Approval dialog timed out (120s)                |
+| `ArgusBucketNotFoundError`  | `BUCKET_NOT_FOUND`            | Wrong `ARGUS_BUCKET_ID`                         |
+| `ArgusInvalidTokenError`    | `INVALID_TOKEN`               | Wrong or rotated `ARGUS_BUCKET_TOKEN`           |
+| `ArgusBucketInactiveError`  | `BUCKET_INACTIVE`             | Bucket paused in Argus                          |
+| `ArgusPeerResolveError`     | `PEER_RESOLVE`                | Argus could not identify this process           |
+| `ArgusProxyError`           | `PROXY_ERROR`                 | Proxy enabled but misconfigured                 |
+| `ArgusInvalidRequestError`  | `INVALID_REQUEST`             | Malformed IPC request                           |
+| `ArgusInvalidResponseError` | —                             | Unexpected Argus response                       |
+| `ArgusConfigureError`       | —                             | Proxy unavailable or disabled for bucket        |
+| `ArgusError`                | other `error` codes           | `DB_ERROR`, `INTERNAL_ERROR`, etc.              |
 
 ## Proxy cookbook
 
