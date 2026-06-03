@@ -6,7 +6,6 @@ from functools import lru_cache
 from typing import Any
 
 from useargus.ipc.client import ProxyConfig
-from useargus.proxy.config import proxy_url, require_proxy_config
 from useargus.proxy.detailed import get_argus_proxy_detailed
 
 
@@ -17,7 +16,10 @@ def _detailed(proxy: ProxyConfig | None = None):
 def argus_requests_config(
     proxy: ProxyConfig | None = None,
 ) -> dict[str, Any]:
-    """Kwargs for ``requests.Session`` (mount :func:`create_argus_requests_proxy_adapter` separately)."""
+    """Kwargs for ``requests.Session``.
+
+    Mount :func:`create_argus_requests_proxy_adapter` on the session separately.
+    """
     d = _detailed(proxy)
     return {
         "proxies": {"http": d.url, "https": d.url},
