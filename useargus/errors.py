@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import NoReturn
+from typing import NoReturn, TypeAlias
 
 
 class ArgusError(Exception):
@@ -134,8 +134,21 @@ class ArgusConfigureError(ArgusError):
         super().__init__("CONFIGURE_ERROR", message, request_id=request_id)
 
 
+# Subclasses raised via ``raise_for_ipc_response`` (message + optional request_id only).
+_MessageIpcError: TypeAlias = (
+    type[ArgusConnectionError]
+    | type[ArgusLockedError]
+    | type[ArgusBucketNotFoundError]
+    | type[ArgusInvalidTokenError]
+    | type[ArgusBucketInactiveError]
+    | type[ArgusInvalidRequestError]
+    | type[ArgusPeerResolveError]
+    | type[ArgusProxyError]
+    | type[ArgusInvalidResponseError]
+)
+
 # Maps Argus IPC ``code`` (status=error) to exception class.
-_IPC_ERROR_CLASSES: dict[str, type[ArgusError]] = {
+_IPC_ERROR_CLASSES: dict[str, _MessageIpcError] = {
     "BUCKET_NOT_FOUND": ArgusBucketNotFoundError,
     "NOT_FOUND": ArgusBucketNotFoundError,
     "INVALID_TOKEN": ArgusInvalidTokenError,
@@ -148,10 +161,6 @@ _IPC_ERROR_CLASSES: dict[str, type[ArgusError]] = {
     "SERIALIZE_ERROR": ArgusInvalidResponseError,
     "INVALID_RESPONSE": ArgusInvalidResponseError,
     "UNKNOWN_STATUS": ArgusInvalidResponseError,
-    "LOCK_ERROR": ArgusError,
-    "DB_ERROR": ArgusError,
-    "INTERNAL_ERROR": ArgusError,
-    "IPC_ERROR": ArgusError,
 }
 
 
@@ -203,19 +212,21 @@ def raise_for_ipc_response(resp: dict[str, object]) -> NoReturn:
             if isinstance(message, str)
             else "Access denied. Approve this client in Argus and retry."
         )
-        denied_code = resp.get("code")
-        code = denied_code if isinstance(denied_code, str) else "APPROVAL_DENIED"
-        if code == "APPROVAL_TIMEOUT":
+        denied_code_raw = resp.get("code")
+        denied_code = (
+            denied_code_raw if isinstance(denied_code_raw, str) else "APPROVAL_DENIED"
+        )
+        if denied_code == "APPROVAL_TIMEOUT":
             raise ArgusApprovalTimeoutError(msg, request_id=rid)
         raise ArgusApprovalDeniedError(msg, request_id=rid)
 
     if status == "error":
-        code = resp.get("code")
-        message = resp.get("message")
-        code_str = code if isinstance(code, str) else "IPC_ERROR"
+        error_code_raw = resp.get("code")
+        message_raw = resp.get("message")
+        code_str = error_code_raw if isinstance(error_code_raw, str) else "IPC_ERROR"
         msg = (
-            message
-            if isinstance(message, str)
+            message_raw
+            if isinstance(message_raw, str)
             else _fallback_ipc_message(code_str)
         )
         cls = _IPC_ERROR_CLASSES.get(code_str)

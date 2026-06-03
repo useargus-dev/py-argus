@@ -112,3 +112,20 @@ def test_legacy_not_found_maps_to_bucket_not_found() -> None:
         raise_for_ipc_response(
             {"status": "error", "code": "NOT_FOUND", "message": "bucket not found"}
         )
+
+
+def test_raises_generic_ipc_error_as_argus_error() -> None:
+    from useargus.errors import ArgusError
+
+    with pytest.raises(ArgusError) as exc:
+        raise_for_ipc_response(
+            {
+                "status": "error",
+                "code": "INTERNAL_ERROR",
+                "message": "Something went wrong.",
+                "request_id": "req-99",
+            }
+        )
+    assert exc.value.code == "INTERNAL_ERROR"
+    assert exc.value.request_id == "req-99"
+    assert "went wrong" in str(exc.value)

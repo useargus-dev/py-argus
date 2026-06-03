@@ -35,6 +35,9 @@ dev = [
     "ruff>=0.15.15,<0.16.0",
     "mypy>=1.13",
     "build>=1.2",
+    "types-requests>=2.32",
+    "requests>=2.32",
+    "httpx>=0.28",
 ]
 
 [project.urls]
@@ -67,6 +70,14 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.10"
 strict = true
 packages = ["useargus"]
+
+[[tool.mypy.overrides]]
+module = [
+    "httpx",
+    "langchain_anthropic",
+    "langchain_anthropic._client_utils",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -6,10 +6,10 @@ from functools import lru_cache
 from typing import Any
 
 from useargus.ipc.client import ProxyConfig
-from useargus.proxy.detailed import get_argus_proxy_detailed
+from useargus.proxy.detailed import ArgusProxyDetailed, get_argus_proxy_detailed
 
 
-def _detailed(proxy: ProxyConfig | None = None):
+def _detailed(proxy: ProxyConfig | None = None) -> ArgusProxyDetailed:
     return get_argus_proxy_detailed(proxy)
 
 
