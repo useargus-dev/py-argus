@@ -2,6 +2,8 @@
 
 Load environment variables from [Argus](https://github.com/useargus-dev) over local IPC, with `.env` fallback — similar to `python-dotenv`, but secrets come from your Argus bucket when the desktop app is running.
 
+**v0.2** — returns Argus proxy connection details so you wire any HTTP library yourself.
+
 ## Requirements
 
 - **Python** 3.10+
@@ -14,6 +16,37 @@ Load environment variables from [Argus](https://github.com/useargus-dev) over lo
 pip install useargus
 ```
 
+## Usage modes
+
+### Without Argus Proxy
+
+When proxy is **disabled** on the bucket, `load_env()` injects **real secret values** into `os.environ`. Use any HTTP client normally:
+
+```python
+import os
+import httpx
+from useargus import load_env
+
+load_env()
+
+with httpx.Client() as client:
+    client.get("https://api.example.com", headers={"Authorization": f"Bearer {os.environ['API_KEY']}"})
+```
+
+### With Argus Proxy enabled
+
+When proxy is **enabled**, proxy mappings receive **`argus-proxy-*` placeholders** — not real keys. Call `load_env()`, then wire your HTTP client with SDK helpers:
+
+```python
+import httpx
+from useargus import load_env, argus_httpx_config
+
+load_env()
+client = httpx.Client(**argus_httpx_config(), timeout=60)
+```
+
+See [docs/usage](./docs/usage/README.md) for per-library guides (requests, httpx, aiohttp, Anthropic SDK, LangChain, …).
+
 ## Usage
 
 Call `load_env()` **before** other modules read `os.environ`:
@@ -23,6 +56,8 @@ from useargus import load_env
 
 load_env()
 ```
+
+When the bucket has **Argus Proxy** enabled, wire **your HTTP client** after `load_env()` using the proxy helpers (see [docs/usage](./docs/usage/README.md)).
 
 ### Migration from python-dotenv
 
@@ -58,10 +93,10 @@ Copy `.env.example` to get started.
 
 ### Argus app lock vs sign-out
 
-| State | IPC |
-|--------|-----|
-| Signed in, idle app lock | Works — approval popup may appear for new clients |
-| Signed out | Returns `locked` — use `fallback_on_locked=True` to load `.env` only |
+| State                    | IPC                                                                  |
+| ------------------------ | -------------------------------------------------------------------- |
+| Signed in, idle app lock | Works — approval popup may appear for new clients                    |
+| Signed out               | Returns `locked` — use `fallback_on_locked=True` to load `.env` only |
 
 Idle **app lock** does **not** block IPC. Only **sign-out** returns IPC `locked`.
 
@@ -87,6 +122,25 @@ result = load_env(
 # result.keys — names set (never values)
 ```
 
+### Proxy wiring
+
+After `load_env()`, use per-library **config** helpers and **builders** where needed:
+
+```python
+from useargus import argus_httpx_config, create_argus_requests_proxy_adapter
+
+client = httpx.Client(**argus_httpx_config(), timeout=60)
+```
+
+| Kind     | Functions                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| Config   | `argus_requests_config()`, `argus_httpx_config()`, `argus_aiohttp_config()`, `argus_urllib_config()` |
+| Builders | `create_argus_requests_proxy_adapter()` / `create_argus_requests_proxy_adapter_class()`              |
+
+Per-library copy-paste examples: **[docs/usage/](./docs/usage/README.md)**
+
+Low-level IPC fields remain on `require_proxy_config()` / `get_proxy_config()`.
+
 ### `fetch_bucket_env(...)`
 
 Lower-level IPC call if you only need the bucket map:
@@ -104,12 +158,66 @@ env = fetch_bucket_env(
 
 ### Errors
 
-| Error | When |
-|--------|------|
-| `ArgusConnectionError` | Socket missing, Argus not running |
-| `ArgusLockedError` | Argus signed out (`status: locked`) |
-| `ArgusDeniedError` | User denied or approval timed out |
-| `ArgusError` | Invalid token, bad request, etc. |
+All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch specific types for programmatic handling:
+
+| Error                       | Argus IPC                     | When                                            |
+| --------------------------- | ----------------------------- | ----------------------------------------------- |
+| `ArgusConnectionError`      | —                             | Socket/pipe missing, timeout, connection closed |
+| `ArgusLockedError`          | `status: locked`              | Argus signed out                                |
+| `ArgusApprovalDeniedError`  | `denied` + `APPROVAL_DENIED`  | User rejected client access                     |
+| `ArgusApprovalTimeoutError` | `denied` + `APPROVAL_TIMEOUT` | Approval dialog timed out (120s)                |
+| `ArgusBucketNotFoundError`  | `BUCKET_NOT_FOUND`            | Wrong `ARGUS_BUCKET_ID`                         |
+| `ArgusInvalidTokenError`    | `INVALID_TOKEN`               | Wrong or rotated `ARGUS_BUCKET_TOKEN`           |
+| `ArgusBucketInactiveError`  | `BUCKET_INACTIVE`             | Bucket paused in Argus                          |
+| `ArgusPeerResolveError`     | `PEER_RESOLVE`                | Argus could not identify this process           |
+| `ArgusProxyError`           | `PROXY_ERROR`                 | Proxy enabled but misconfigured                 |
+| `ArgusInvalidRequestError`  | `INVALID_REQUEST`             | Malformed IPC request                           |
+| `ArgusInvalidResponseError` | —                             | Unexpected Argus response                       |
+| `ArgusConfigureError`       | —                             | Proxy unavailable or disabled for bucket        |
+| `ArgusError`                | other `error` codes           | `DB_ERROR`, `INTERNAL_ERROR`, etc.              |
+
+## Proxy cookbook
+
+Call `load_env()` first in every example. Full guides: **[docs/usage/](./docs/usage/README.md)**
+
+### `requests`
+
+```python
+import requests
+from useargus import load_env, argus_requests_config, create_argus_requests_proxy_adapter
+
+load_env()
+cfg = argus_requests_config()
+session = requests.Session()
+session.proxies.update(cfg["proxies"])
+session.verify = cfg["verify"]
+session.trust_env = cfg["trust_env"]
+adapter = create_argus_requests_proxy_adapter()
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+```
+
+### `httpx`
+
+```python
+import httpx
+from useargus import load_env, argus_httpx_config
+
+load_env()
+client = httpx.Client(**argus_httpx_config(), timeout=30)
+```
+
+### Other libraries
+
+See [docs/usage/](./docs/usage/README.md) for aiohttp, urllib, Anthropic SDK, and LangChain.
+
+## Package layout
+
+- `useargus/env/load.py` — `load_env`
+- `useargus/proxy/config.py` — `get_proxy_config`, `require_proxy_config`, `proxy_url`
+- `useargus/proxy/wiring.py` — per-library proxy config and builders
+- `useargus/ipc/client.py` — IPC client, `ProxyConfig`
+- `useargus/errors.py` — error types
 
 ## Development
 
@@ -130,17 +238,9 @@ Publishing is **manual** via GitHub Actions (adding `PYPI_TOKEN` alone does not 
 
 1. Add repository secret **`PYPI_TOKEN`** (PyPI API token with publish rights).
 2. Go to **Actions → Publish to PyPI → Run workflow**.
-3. Enter the version (e.g. `0.1.0` or `v0.1.0`).
+3. Enter the version (e.g. `0.2.0` or `v0.2.0`).
 
 The workflow runs CI, sets `pyproject.toml` version, publishes to PyPI, tags `v<version>`, and creates a GitHub release.
-
-### Publish locally (optional)
-
-```bash
-pip install -e ".[dev]"
-python -m build
-twine upload dist/*
-```
 
 ## License
 
