@@ -65,8 +65,9 @@ def load_env(
     """
     Load environment variables into os.environ (secrets only).
 
-    Does not enable HTTP proxy or TLS. After ``load_env()``, wire your HTTP client
-    with factory helpers (``requests_session``, ``httpx_client``, ``anthropic_http_client``, …).
+    Does not configure HTTP clients. After ``load_env()``, call
+    :func:`get_proxy_config` / :func:`require_proxy_config` and wire your HTTP
+    library with the returned proxy URLs and CA bundle path.
 
     1. Parse .env (does not apply yet).
     2. If ARGUS_BUCKET_ID and ARGUS_BUCKET_TOKEN are set (OS env or .env),

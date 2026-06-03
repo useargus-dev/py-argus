@@ -2,7 +2,7 @@
 
 Load environment variables from [Argus](https://github.com/useargus-dev) over local IPC, with `.env` fallback — similar to `python-dotenv`, but secrets come from your Argus bucket when the desktop app is running.
 
-**v0.2** — supports Argus Proxy factories so real API keys never need to sit in `os.environ`.
+**v0.2** — returns Argus proxy connection details so you wire any HTTP library yourself.
 
 ## Requirements
 
@@ -35,17 +35,17 @@ with httpx.Client() as client:
 
 ### With Argus Proxy enabled
 
-When proxy is **enabled**, proxy mappings receive **`argus-proxy-*` placeholders** — not real keys. Call `load_env()` then wire **one factory per HTTP library**:
+When proxy is **enabled**, proxy mappings receive **`argus-proxy-*` placeholders** — not real keys. Call `load_env()`, then wire your HTTP client with SDK helpers:
 
 ```python
-from useargus import load_env, httpx_client
+import httpx
+from useargus import load_env, argus_httpx_config
 
 load_env()
-client = httpx_client(timeout=60)
-# Traffic routes through 127.0.0.1; Argus rewrites placeholders upstream
+client = httpx.Client(**argus_httpx_config(), timeout=60)
 ```
 
-See [Proxy cookbook](#proxy-cookbook) for requests, Anthropic SDK, aiohttp, and more.
+See [docs/usage](./docs/usage/README.md) for per-library guides (requests, httpx, aiohttp, Anthropic SDK, LangChain, …).
 
 ## Usage
 
@@ -57,7 +57,7 @@ from useargus import load_env
 load_env()
 ```
 
-When the bucket has **Argus Proxy** enabled, wire **your HTTP client explicitly** after `load_env()` (see [Usage modes](#usage-modes) and [Proxy cookbook](#proxy-cookbook)).
+When the bucket has **Argus Proxy** enabled, wire **your HTTP client** after `load_env()` using the proxy helpers (see [docs/usage](./docs/usage/README.md)).
 
 ### Migration from python-dotenv
 
@@ -122,26 +122,24 @@ result = load_env(
 # result.keys — names set (never values)
 ```
 
-### Proxy factories (preferred)
+### Proxy wiring
 
-After `load_env()`, use one factory per HTTP library — **no global monkey patches**:
+After `load_env()`, use per-library **config** helpers and **builders** where needed:
 
-| Factory                                   | Use with                               |
-| ----------------------------------------- | -------------------------------------- |
-| `create_proxy_agents()`                   | Low-level proxy URL + CA + auth header |
-| `requests_session()`                      | `requests`                             |
-| `httpx_client()` / `httpx_async_client()` | `httpx`                                |
-| `anthropic_http_client()`                 | `anthropic` SDK, LangChain             |
-| `aiohttp_session()`                       | `aiohttp`                              |
-| `ssl_context()`                           | `urllib` / `http.client`               |
+```python
+from useargus import argus_httpx_config, create_argus_requests_proxy_adapter
 
-### `configure(client=None)` (deprecated)
+client = httpx.Client(**argus_httpx_config(), timeout=60)
+```
 
-`configure()` without arguments is **deprecated** (warns; removed next major). Use factories above.
+| Kind | Functions |
+| ---- | --------- |
+| Config | `argus_requests_config()`, `argus_httpx_config()`, `argus_aiohttp_config()`, `argus_urllib_config()` |
+| Builders | `create_argus_requests_proxy_adapter()` / `create_argus_requests_proxy_adapter_class()` |
 
-### `load_proxies(...)` (deprecated)
+Per-library copy-paste examples: **[docs/usage/](./docs/usage/README.md)**
 
-Use factory helpers instead.
+Low-level IPC fields remain on `require_proxy_config()` / `get_proxy_config()`.
 
 ### `fetch_bucket_env(...)`
 
@@ -175,98 +173,50 @@ All errors extend `ArgusError` with `.code` and optional `.request_id`. Catch sp
 | `ArgusProxyError`           | `PROXY_ERROR`                 | Proxy enabled but misconfigured                   |
 | `ArgusInvalidRequestError`  | `INVALID_REQUEST`             | Malformed IPC request                             |
 | `ArgusInvalidResponseError` | —                             | Unexpected Argus response                         |
-| `ArgusConfigureError`       | —                             | `configure()` preconditions or unsupported client |
+| `ArgusConfigureError`       | —                             | Proxy unavailable or disabled for bucket          |
 | `ArgusError`                | other `error` codes           | `DB_ERROR`, `INTERNAL_ERROR`, etc.                |
 
 ## Proxy cookbook
 
-Call `load_env()` first in every example.
+Call `load_env()` first in every example. Full guides: **[docs/usage/](./docs/usage/README.md)**
 
 ### `requests`
 
 ```python
-from useargus import load_env, requests_session
+import requests
+from useargus import load_env, argus_requests_config, create_argus_requests_proxy_adapter
 
 load_env()
-session = requests_session()
-session.get("https://api.anthropic.com/v1/models", headers={...})
+cfg = argus_requests_config()
+session = requests.Session()
+session.proxies.update(cfg["proxies"])
+session.verify = cfg["verify"]
+session.trust_env = cfg["trust_env"]
+adapter = create_argus_requests_proxy_adapter()
+session.mount("https://", adapter)
+session.mount("http://", adapter)
 ```
 
 ### `httpx`
 
 ```python
-from useargus import load_env, httpx_client
+import httpx
+from useargus import load_env, argus_httpx_config
 
 load_env()
-client = httpx_client(timeout=30)
-client.get("https://api.anthropic.com/v1/models", headers={...})
-client.close()
+client = httpx.Client(**argus_httpx_config(), timeout=30)
 ```
 
-### `anthropic` SDK
+### Other libraries
 
-```python
-from anthropic import Anthropic
-from useargus import load_env, anthropic_http_client
-
-load_env()
-client = Anthropic(http_client=anthropic_http_client(timeout=60))
-```
-
-### LangChain (`langchain-anthropic`)
-
-```python
-import os
-from anthropic import Anthropic
-from langchain_anthropic import ChatAnthropic
-from useargus import load_env, anthropic_http_client
-
-load_env()
-anthropic = Anthropic(
-    api_key=os.environ["ANTHROPIC_API_KEY"],
-    http_client=anthropic_http_client(timeout=60),
-)
-llm = ChatAnthropic(model="claude-sonnet-4-5", client=anthropic)
-```
-
-### `aiohttp`
-
-```python
-from useargus import load_env, aiohttp_session
-
-load_env()
-session = aiohttp_session()
-async with session.get("https://api.anthropic.com/v1/models", headers={...}) as r:
-    ...
-```
-
-### `urllib` / stdlib
-
-```python
-import urllib.request
-from useargus import load_env, create_proxy_agents, ssl_context
-
-load_env()
-agents = create_proxy_agents()
-ctx = ssl_context()
-opener = urllib.request.build_opener(
-    urllib.request.ProxyHandler({"https": agents.proxy_url}),
-    urllib.request.HTTPSHandler(context=ctx),
-)
-```
-
-### BAML
-
-Configure the HTTP client BAML uses (typically `httpx_client()`) and pass it to your generated client setup.
+See [docs/usage/](./docs/usage/README.md) for aiohttp, urllib, Anthropic SDK, and LangChain.
 
 ## Package layout
 
-Internal modules (public exports unchanged):
-
 - `useargus/env/load.py` — `load_env`
-- `useargus/proxy/factories.py` — explicit proxy wiring
-- `useargus/proxy/config.py` — `get_proxy_config`, `require_proxy_config`
-- `useargus/ipc/client.py` — IPC client
+- `useargus/proxy/config.py` — `get_proxy_config`, `require_proxy_config`, `proxy_url`
+- `useargus/proxy/wiring.py` — per-library proxy config and builders
+- `useargus/ipc/client.py` — IPC client, `ProxyConfig`
 - `useargus/errors.py` — error types
 
 ## Development
@@ -288,17 +238,9 @@ Publishing is **manual** via GitHub Actions (adding `PYPI_TOKEN` alone does not 
 
 1. Add repository secret **`PYPI_TOKEN`** (PyPI API token with publish rights).
 2. Go to **Actions → Publish to PyPI → Run workflow**.
-3. Enter the version (e.g. `0.1.0` or `v0.1.0`).
+3. Enter the version (e.g. `0.2.0` or `v0.2.0`).
 
 The workflow runs CI, sets `pyproject.toml` version, publishes to PyPI, tags `v<version>`, and creates a GitHub release.
-
-### Publish locally (optional)
-
-```bash
-pip install -e ".[dev]"
-python -m build
-twine upload dist/*
-```
 
 ## License
 

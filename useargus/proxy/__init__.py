@@ -1,34 +1,27 @@
-from useargus.proxy.config import get_proxy_config, require_proxy_config, proxy_url
-from useargus.proxy.configure import ConfigureResult, configure
-from useargus.proxy.factories import (
-    ProxyAgents,
-    aiohttp_connector,
-    aiohttp_session,
-    anthropic_http_client,
-    build_ssl_context,
-    create_proxy_agents,
-    httpx_async_client,
-    httpx_client,
-    requests_session,
-    ssl_context,
+from useargus.proxy.config import get_proxy_config, proxy_url, require_proxy_config
+from useargus.proxy.wiring import (
+    argus_aiohttp_config,
+    argus_anthropic_config,
+    argus_httpx_config,
+    argus_langchain_anthropic_config,
+    argus_requests_config,
+    argus_urllib_config,
+    create_argus_requests_proxy_adapter,
+    create_argus_requests_proxy_adapter_class,
+    wire_langchain_anthropic_http_client,
 )
-from useargus.proxy.undici import load_proxies
 
 __all__ = [
-    "ConfigureResult",
-    "ProxyAgents",
-    "aiohttp_connector",
-    "aiohttp_session",
-    "anthropic_http_client",
-    "build_ssl_context",
-    "configure",
-    "create_proxy_agents",
+    "argus_aiohttp_config",
+    "argus_anthropic_config",
+    "argus_httpx_config",
+    "argus_langchain_anthropic_config",
+    "argus_requests_config",
+    "argus_urllib_config",
+    "create_argus_requests_proxy_adapter",
+    "create_argus_requests_proxy_adapter_class",
     "get_proxy_config",
-    "httpx_async_client",
-    "httpx_client",
-    "load_proxies",
     "proxy_url",
     "require_proxy_config",
-    "requests_session",
-    "ssl_context",
+    "wire_langchain_anthropic_http_client",
 ]

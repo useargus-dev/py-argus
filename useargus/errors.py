@@ -128,7 +128,7 @@ class ArgusInvalidResponseError(ArgusError):
 
 
 class ArgusConfigureError(ArgusError):
-    """``configure()`` failed (proxy unavailable or unsupported client)."""
+    """Proxy config unavailable or disabled for bucket."""
 
     def __init__(self, message: str, *, request_id: str | None = None) -> None:
         super().__init__("CONFIGURE_ERROR", message, request_id=request_id)
