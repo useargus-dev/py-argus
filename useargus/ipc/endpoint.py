@@ -12,8 +12,6 @@ _cached_windows_pipe: str | None = None
 
 def ipc_pipe_name() -> str:
     """Return the Argus desktop IPC endpoint for this process."""
-    if os.name != "nt":
-        return LEGACY_WINDOWS_PIPE
     global _cached_windows_pipe
     if _cached_windows_pipe is not None:
         return _cached_windows_pipe
