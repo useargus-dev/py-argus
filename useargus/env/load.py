@@ -76,10 +76,17 @@ def load_env(
     4. Without bucket credentials, apply .env only (dotenv-style).
 
     Argus idle app lock does not block IPC — only sign-out returns locked.
+
+    When ``ARGUS_SANDBOX=1`` (set by ``argus run``), env is already injected; this
+    applies ``.env`` overrides only and skips IPC.
     """
     env_path = _resolve_env_path(path)
     parsed = _read_parsed_env(env_path)
     bucket_id, token = _bucket_credentials(parsed)
+
+    if os.environ.get("ARGUS_SANDBOX") == "1":
+        keys_from_dotenv = _apply_to_environ(parsed, override=True)
+        return LoadEnvResult(source="bucket", keys=keys_from_dotenv)
 
     if not bucket_id or not token:
         state.set_cached_proxy(None)

@@ -18,6 +18,7 @@ from useargus.errors import (
     ArgusProxyError,
 )
 from useargus.ipc.client import FetchBucketEnvResult, ProxyConfig, fetch_bucket_env
+from useargus.ipc.endpoint import ipc_pipe_name
 from useargus.proxy.config import get_proxy_config, proxy_url, require_proxy_config
 from useargus.proxy.wiring import (
     argus_aiohttp_config,
@@ -60,9 +61,10 @@ __all__ = [
     "wire_langchain_anthropic_http_client",
     "fetch_bucket_env",
     "get_proxy_config",
+    "ipc_pipe_name",
     "load_env",
     "proxy_url",
     "require_proxy_config",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

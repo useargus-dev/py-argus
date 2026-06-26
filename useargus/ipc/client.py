@@ -17,6 +17,7 @@ from useargus.errors import (
     ArgusInvalidResponseError,
     raise_for_ipc_response,
 )
+from useargus.ipc.endpoint import ipc_pipe_name
 
 DEFAULT_TIMEOUT_MS = 130_000
 
@@ -43,7 +44,7 @@ def _socket_path() -> Path:
 def _connection_hint() -> str:
     if os.name == "nt":
         return (
-            "Is Argus signed in and running? The named pipe \\\\.\\pipe\\argus must exist."
+            f"Is Argus signed in and running? The named pipe {ipc_pipe_name()} must exist."
         )
     sock = _socket_path()
     return (
@@ -97,7 +98,8 @@ def _send_windows(payload: dict[str, Any], timeout_ms: int) -> str:
     timeout_s = timeout_ms / 1000.0
 
     def _exchange() -> str:
-        with open(r"\\.\pipe\argus", "r+b", buffering=0) as pipe:
+        pipe_path = ipc_pipe_name()
+        with open(pipe_path, "r+b", buffering=0) as pipe:
             pipe.write(line)
             pipe.flush()
             response = pipe.readline()

@@ -102,3 +102,21 @@ def test_override_false_skips_existing_os_env(
     assert result.source == "dotenv"
     assert os.environ["FOO"] == "already_set"
     assert result.keys == []
+
+
+def test_load_env_skips_ipc_when_argus_sandbox(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ARGUS_SANDBOX", "1")
+    (tmp_path / ".env").write_text(
+        "ARGUS_BUCKET_ID=test-id\nARGUS_BUCKET_TOKEN=test-token\nFOO=local\n",
+        encoding="utf-8",
+    )
+
+    with patch("useargus.env.load.fetch_bucket_env") as mock_fetch:
+        result = load_env()
+
+    mock_fetch.assert_not_called()
+    assert result.source == "bucket"
+    assert os.environ["FOO"] == "local"
